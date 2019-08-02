@@ -1,14 +1,16 @@
-import java.util.Random;
-
 import aiinterface.AIInterface;
+import aiinterface.CommandCenter;
 import struct.FrameData;
 import struct.GameData;
 import struct.Key;
+import enumerate.Action;
 
 public class TOVOR implements AIInterface {
 	
 	Key key;
-	Random rand;
+	CommandCenter cc;
+	boolean cPlayer;
+	FrameData fd;
 
 	@Override
 	public void close() {
@@ -19,14 +21,17 @@ public class TOVOR implements AIInterface {
 	@Override
 	public void getInformation(FrameData arg0, boolean arg1) {
 		// TODO Auto-generated method stub
-
+		fd = arg0;
+		cc.setFrameData(fd, cPlayer);
 	}
 
 	@Override
 	public int initialize(GameData arg0, boolean arg1) {
 		// TODO Auto-generated method stub
-		rand = new Random();
 		key = new Key();
+		cc = new CommandCenter();
+		cPlayer = arg1;
+		fd = new FrameData();
 		return 0;
 	}
 
@@ -39,13 +44,24 @@ public class TOVOR implements AIInterface {
 	@Override
 	public void processing() {
 		// TODO Auto-generated method stub
-		key.A = (rand.nextInt(100) > 70);
-		key.B = (rand.nextInt(100) > 70);
-		key.C = (rand.nextInt(100) > 70);
-		key.D = (rand.nextInt(100) > 70);
-		key.U = (rand.nextInt(100) > 70);
-		key.L = (rand.nextInt(100) > 70);
-		key.R = (rand.nextInt(100) > 70);
+		if(!fd.getEmptyFlag() && fd.getRemainingFramesNumber()>0) 
+		{
+				System.out.println(fd.getCharacter(cPlayer).getAction());
+				System.out.println(fd.getDistanceX());
+				if (fd.getDistanceX() > 100)
+				{
+					cc.commandCall("6");
+				}
+				else
+				{
+					if(fd.getCharacter(cPlayer).getAction() == Action.STAND)
+					{
+						cc.commandCall("A");
+					}
+				}
+				key = cc.getSkillKey();
+		}
+
 	}
 
 	@Override
