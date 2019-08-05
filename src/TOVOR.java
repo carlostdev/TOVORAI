@@ -1,6 +1,7 @@
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Random;
 
 import aiinterface.AIInterface;
@@ -19,6 +20,7 @@ public class TOVOR implements AIInterface {
 	FrameData fd;
 	Simulator sim;
 	Random rand;
+	Map<String,Integer> ActionFrames;
 
 	@Override
 	public void close() {
@@ -57,13 +59,17 @@ public class TOVOR implements AIInterface {
 		if(!fd.getEmptyFlag() && fd.getRemainingFramesNumber()>0) 
 		{
 			McTree mcTree = new McTree();
+			mcTree.getStartNode().setFrameData(fd);
 			long startTime = System.currentTimeMillis();
 			long elapsedTime = 0L;
+			int it = 0;
 			while (elapsedTime < 16)
 			{
 				treeSearch(mcTree,fd);
 				elapsedTime = (new Date()).getTime() - startTime;
+				it++;
 			}
+			System.out.println("Iterations: " + it);
 			Action newAction = mcTree.getStartNode().ucb1Select().getAction();
 			cc.commandCall(newAction.toString());
 			key = cc.getSkillKey();
@@ -96,10 +102,12 @@ public class TOVOR implements AIInterface {
 		myAct.add(currNode.getAction());
 		LinkedList<Action> oppAct = new LinkedList<Action>();
 		oppAct.add(randomAction());
-		FrameData sfd = sim.simulate(fd, cPlayer, myAct, oppAct, 35);
-		int score = fd.getCharacter(cPlayer).getHp() - sfd.getCharacter(cPlayer).getHp()
-				- (fd.getCharacter(!cPlayer).getHp() - sfd.getCharacter(!cPlayer).getHp());
+		FrameData cfd = currNode.parent.getFrameData();
+		FrameData sfd = sim.simulate(cfd, cPlayer, myAct, oppAct, 35);
+		int score = cfd.getCharacter(cPlayer).getHp() - sfd.getCharacter(cPlayer).getHp()
+				- (cfd.getCharacter(!cPlayer).getHp() - sfd.getCharacter(!cPlayer).getHp());
 		currNode.setResult(score);
+		currNode.setFrameData(sfd);
 		currNode.visit();
 		
 		//Back-propagation
@@ -125,6 +133,7 @@ public class TOVOR implements AIInterface {
 		private Action mcAction;
 		private int t;
 		private int n;
+		private FrameData fd;
 		
 		public McNode(McNode par, Action act)
 		{
@@ -133,6 +142,7 @@ public class TOVOR implements AIInterface {
 			t = 0;
 			n = 0;
 			children = new ArrayList<McNode>();
+			fd = null;
 		}
 		
 		public McNode()
@@ -142,6 +152,7 @@ public class TOVOR implements AIInterface {
 			t = 0;
 			n = 0;
 			children = new ArrayList<McNode>();
+			fd = null;
 		}
 		
 		public McNode getParent() 
@@ -174,6 +185,16 @@ public class TOVOR implements AIInterface {
 			t = result;
 		}
 		
+		public FrameData getFrameData()
+		{
+			return fd;
+		}
+		
+		public void setFrameData(FrameData ifd)
+		{
+			fd = ifd;
+		}
+		
 		public boolean isLeafNode()
 		{
 			return (children.size() == 0);
@@ -201,7 +222,7 @@ public class TOVOR implements AIInterface {
 				}
 				else 
 				{
-					ucb1 = child.t + 2 * Math.sqrt(Math.log(n)/child.getVisits());
+					ucb1 = child.getResult()/child.getVisits() + 2 * Math.sqrt(Math.log(n)/child.getVisits());
 				}
 				if(ucb1 > max)
 				{
