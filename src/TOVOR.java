@@ -1,5 +1,7 @@
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedList;
+import java.util.Random;
 
 import aiinterface.AIInterface;
 import aiinterface.CommandCenter;
@@ -15,7 +17,8 @@ public class TOVOR implements AIInterface {
 	CommandCenter cc;
 	boolean cPlayer;
 	FrameData fd;
-	GameData gd;
+	Simulator sim;
+	Random rand;
 
 	@Override
 	public void close() {
@@ -37,7 +40,8 @@ public class TOVOR implements AIInterface {
 		cc = new CommandCenter();
 		cPlayer = arg1;
 		fd = new FrameData();
-		gd = arg0;
+		sim = new Simulator(arg0);
+		rand = new Random();
 		return 0;
 	}
 
@@ -52,46 +56,60 @@ public class TOVOR implements AIInterface {
 		// TODO Auto-generated method stub
 		if(!fd.getEmptyFlag() && fd.getRemainingFramesNumber()>0) 
 		{
-			Action action = fd.getCharacter(cPlayer).getAction();
-			if(fd.getCharacter(cPlayer).getEnergy() > 150 && action == Action.STAND) 
+			McTree mcTree = new McTree();
+			long startTime = System.currentTimeMillis();
+			long elapsedTime = 0L;
+			while (elapsedTime < 16)
 			{
-				if (fd.getDistanceX() > 300)
-				{
-					cc.commandCall(Action.STAND_D_DF_FC.toString());
-				}
-				else
-				{
-					cc.commandCall(Action.BACK_JUMP.toString());
-				}
+				treeSearch(mcTree,fd);
+				elapsedTime = (new Date()).getTime() - startTime;
 			}
-			else 
-			{
-				if (fd.getDistanceX() > 100)
-				{
-					cc.commandCall("6");
-				}
-				else
-				{
-					if(action == Action.STAND)
-					{
-						LinkedList<Action> myact = new LinkedList<Action>(Arrays.asList(Action.STAND_FB));
-						LinkedList<Action> opact =  new LinkedList<Action>(Arrays.asList(Action.STAND));
-						Simulator sim = new Simulator(gd);
-						FrameData sd = sim.simulate(fd, cPlayer, myact, opact, 14);
-						if(sd.getCharacter(cPlayer).isHitConfirm())
-						{
-							cc.commandCall(Action.STAND_FB.toString());
-						}
-						else
-						{
-							cc.commandCall("B");
-						}
-					}
-				}
-			}
+			Action newAction = mcTree.getStartNode().ucb1Select().getAction();
+			cc.commandCall(newAction.toString());
 			key = cc.getSkillKey();
 		}
 
+	}
+	
+	public Action randomAction()
+	{
+		return Action.values()[rand.nextInt(Action.values().length - 1)];
+	}
+	
+	public void treeSearch(McTree tree, FrameData fd)
+	{
+		McNode currNode = tree.getStartNode();
+		
+		//Node selection
+		while (!currNode.isLeafNode())
+		{
+			currNode = currNode.ucb1Select();
+		}
+		if(currNode.getVisits() != 0)
+		{
+			currNode.expand();
+			currNode = currNode.getChildren().get(0);  
+		}
+		
+		//Simulation
+		LinkedList<Action> myAct = new LinkedList<Action>();
+		myAct.add(currNode.getAction());
+		LinkedList<Action> oppAct = new LinkedList<Action>();
+		oppAct.add(randomAction());
+		FrameData sfd = sim.simulate(fd, cPlayer, myAct, oppAct, 35);
+		int score = fd.getCharacter(cPlayer).getHp() - sfd.getCharacter(cPlayer).getHp()
+				- (fd.getCharacter(!cPlayer).getHp() - sfd.getCharacter(!cPlayer).getHp());
+		currNode.setResult(score);
+		currNode.visit();
+		
+		//Back-propagation
+		while(currNode.getParent() != null)
+		{
+			McNode parent = currNode.getParent();
+			parent.visit();
+			parent.setResult(parent.getResult() + currNode.getResult());
+			currNode = parent;
+		}
 	}
 
 	@Override
@@ -100,4 +118,131 @@ public class TOVOR implements AIInterface {
 
 	}
 
+	private class McNode
+	{
+		private McNode parent; 
+		private ArrayList<McNode> children;
+		private Action mcAction;
+		private int t;
+		private int n;
+		
+		public McNode(McNode par, Action act)
+		{
+			parent = par;
+			mcAction = act;
+			t = 0;
+			n = 0;
+			children = new ArrayList<McNode>();
+		}
+		
+		public McNode()
+		{
+			parent = null;
+			mcAction = null;
+			t = 0;
+			n = 0;
+			children = new ArrayList<McNode>();
+		}
+		
+		public McNode getParent() 
+		{
+			return parent;
+		}
+		
+		public ArrayList<McNode> getChildren()
+		{
+			return children;
+		}
+		
+		public void addChild(Action chAct)
+		{
+			children.add(new McNode(this,chAct));
+		}
+		
+		public Action getAction()
+		{
+			return mcAction;
+		}
+		
+		public int getResult()
+		{
+			return t;
+		}
+		
+		public void setResult(int result)
+		{
+			t = result;
+		}
+		
+		public boolean isLeafNode()
+		{
+			return (children.size() == 0);
+		}
+		
+		public void expand()
+		{
+			for (Action act : Action.values())
+			{
+				addChild(act);
+			}
+		}
+		
+		public McNode ucb1Select()
+		{
+			Double max = Double.NEGATIVE_INFINITY;
+			int maxInd = -1;
+			for (int i=0;i<children.size();i++)
+			{
+				Double ucb1 = 0d;
+				McNode child = children.get(i);
+				if(child.n == 0)
+				{
+					ucb1 = Double.MAX_VALUE;
+				}
+				else 
+				{
+					ucb1 = child.t + 2 * Math.sqrt(Math.log(n)/child.getVisits());
+				}
+				if(ucb1 > max)
+				{
+					max = ucb1;
+					maxInd = i;
+				}
+			}
+			if(maxInd > -1) 
+			{
+				return children.get(maxInd);
+			}
+			else
+			{
+				return null;
+			}
+		}
+		
+		public void visit()
+		{
+			n++;
+		}
+		
+		public int getVisits() 
+		{
+			return n;
+		}
+	}
+	
+	private class McTree
+	{
+		private McNode mcStart;
+		
+		public McTree() 
+		{
+			mcStart = new McNode();
+			mcStart.expand();
+		}
+		
+		public McNode getStartNode()
+		{
+			return mcStart;
+		}
+	}
 }
