@@ -62,14 +62,11 @@ public class TOVOR implements AIInterface {
 			mcTree.getStartNode().setFrameData(fd);
 			long startTime = System.currentTimeMillis();
 			long elapsedTime = 0L;
-			int it = 0;
 			while (elapsedTime < 16)
 			{
 				treeSearch(mcTree,fd);
 				elapsedTime = (new Date()).getTime() - startTime;
-				it++;
 			}
-			System.out.println("Iterations: " + it);
 			Action newAction = mcTree.getStartNode().ucb1Select().getAction();
 			cc.commandCall(newAction.toString());
 			key = cc.getSkillKey();
